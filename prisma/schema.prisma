@@ -1,0 +1,252 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────
+
+enum UserRole {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+  EMERGENCY
+}
+
+enum SpecialistType {
+  CARDIOLOGIST
+  PULMONOLOGIST
+  NEUROLOGIST
+  ORTHOPEDIC
+  GASTROENTEROLOGIST
+  DERMATOLOGIST
+  PEDIATRICIAN
+  GYNECOLOGIST
+  UROLOGIST
+  ENT_SPECIALIST
+  OPHTHALMOLOGIST
+  PSYCHIATRIST
+  ENDOCRINOLOGIST
+  NEPHROLOGIST
+  ONCOLOGIST
+  GENERAL_PHYSICIAN
+  DENTIST
+  PHYSIOTHERAPIST
+  RADIOLOGIST
+  PATHOLOGIST
+}
+
+enum Department {
+  CARDIOLOGY
+  PULMONOLOGY
+  NEUROLOGY
+  ORTHOPEDICS
+  GASTROENTEROLOGY
+  DERMATOLOGY
+  PEDIATRICS
+  GYNECOLOGY
+  UROLOGY
+  ENT
+  OPHTHALMOLOGY
+  PSYCHIATRY
+  ENDOCRINOLOGY
+  NEPHROLOGY
+  ONCOLOGY
+  GENERAL_MEDICINE
+  DENTAL
+  PHYSIOTHERAPY
+  RADIOLOGY
+  PATHOLOGY
+  EMERGENCY
+}
+
+enum ConsultationType {
+  IN_PERSON
+  VIDEO
+  PHONE
+}
+
+// ─── User ───────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  fullName      String
+  phone         String?
+  role          UserRole  @default(PATIENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  doctorProfile  DoctorProfile?
+  appointments   Appointment[]   @relation("PatientAppointments")
+  notifications  Notification[]
+  chatMessages   ChatMessage[]
+  symptomAnalyses SymptomAnalysis[]
+
+  @@map("users")
+}
+
+// ─── DoctorProfile ──────────────────────────────────────
+
+model DoctorProfile {
+  id              String         @id @default(uuid())
+  userId          String         @unique
+  user            User           @relation(fields: [userId], references: [id])
+  specialistType  SpecialistType
+  department      Department
+  licenseNumber   String         @unique
+  qualification   String
+  experienceYears Int            @default(0)
+  consultationFee Float          @default(0.0)
+  bio             String?
+  isAvailable     Boolean        @default(true)
+  isApproved      Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  hospitalId      String?
+  hospital        Hospital?      @relation(fields: [hospitalId], references: [id])
+
+  appointments    Appointment[]  @relation("DoctorAppointments")
+  schedules       DoctorSchedule[]
+
+  @@index([specialistType])
+  @@index([hospitalId])
+  @@index([isApproved, isAvailable])
+  @@map("doctor_profiles")
+}
+
+// ─── Hospital ───────────────────────────────────────────
+
+model Hospital {
+  id           String   @id @default(uuid())
+  name         String
+  address      String
+  city         String   @default("Peshawar")
+  latitude     Float
+  longitude    Float
+  phone        String?
+  email        String?
+  website      String?
+  departments  Department[]
+  isApproved   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  doctors      DoctorProfile[]
+  appointments Appointment[]
+
+  @@map("hospitals")
+}
+
+// ─── Appointment ────────────────────────────────────────
+
+model Appointment {
+  id              String            @id @default(uuid())
+  patientId       String
+  patient         User              @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctorId        String
+  doctor          DoctorProfile     @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  hospitalId      String?
+  hospital        Hospital?         @relation(fields: [hospitalId], references: [id])
+  date            DateTime
+  timeSlot        String
+  status          AppointmentStatus @default(PENDING)
+  symptoms        String?
+  aiAdvice        String?
+  urgencyLevel    UrgencyLevel?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  consultationType ConsultationType @default(IN_PERSON)
+
+  @@index([doctorId])
+  @@index([patientId])
+  @@index([date, status])
+  @@map("appointments")
+}
+
+// ─── DoctorSchedule ─────────────────────────────────────
+
+model DoctorSchedule {
+  id         String   @id @default(uuid())
+  doctorId   String
+  doctor     DoctorProfile @relation(fields: [doctorId], references: [id])
+  dayOfWeek  Int      // 0=Sun, 1=Mon ... 6=Sat
+  startTime  String   // "09:00"
+  endTime    String   // "17:00"
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([doctorId, dayOfWeek])
+  @@map("doctor_schedules")
+}
+
+// ─── Notification ───────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, APPOINTMENT, REMINDER, ALERT
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// ─── ChatMessage (AI Chatbot History) ───────────────────
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  role      String   // "user" | "assistant"
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("chat_messages")
+}
+
+// ─── SymptomAnalysis (Audit Log) ────────────────────────
+
+model SymptomAnalysis {
+  id                 String       @id @default(uuid())
+  userId             String?
+  user               User?        @relation(fields: [userId], references: [id])
+  symptoms           String
+  suspectedCondition String?
+  department         Department?
+  urgencyLevel       UrgencyLevel?
+  recommendedSpecialist SpecialistType?
+  aiResponse         String
+  createdAt          DateTime     @default(now())
+
+  @@index([userId])
+  @@map("symptom_analyses")
+}
