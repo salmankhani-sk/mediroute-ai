@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { FaHospital, FaLocationDot, FaPhone } from 'react-icons/fa6';
+import { FaHospital, FaLocationPin, FaPhone, FaTriangleExclamation } from 'react-icons/fa6';
 import { findNearestHospitals } from '@/app/actions/location';
 import type { MapHospital } from '@/components/Map';
 
@@ -13,25 +13,22 @@ const MediRouteMap = dynamic(() => import('@/components/Map'), {
 
 const DEPTS = ['CARDIOLOGY','PULMONOLOGY','NEUROLOGY','ORTHOPEDICS','GASTROENTEROLOGY','DERMATOLOGY','PEDIATRICS','GYNECOLOGY','UROLOGY','ENT','OPHTHALMOLOGY','PSYCHIATRY','ENDOCRINOLOGY','NEPHROLOGY','ONCOLOGY','GENERAL_MEDICINE','DENTAL','PHYSIOTHERAPY','RADIOLOGY','PATHOLOGY','EMERGENCY'];
 
+const DEFAULT_LOC = { lat: 34.0151, lng: 71.5249 };
+
 export default function HospitalsPage() {
   const [hospitals, setHospitals] = useState<MapHospital[]>([]);
   const [filtered, setFiltered] = useState<MapHospital[]>([]);
-  const [userLoc, setUserLoc] = useState<{lat:number;lng:number}|null>(null);
+  const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoError, setGeoError] = useState('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
 
+  // Load hospitals based on location
   useEffect(() => {
     (async () => {
-      let loc = { lat: 34.0151, lng: 71.5249 };
-      if (navigator.geolocation) {
-        try {
-          const pos = await new Promise<GeolocationPosition>((res, rej) =>
-            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
-          loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        } catch { /* fallback */ }
-      }
-      setUserLoc(loc);
+      const loc = userLoc || DEFAULT_LOC;
       const data = await findNearestHospitals(loc.lat, loc.lng, 50);
       const mapped: MapHospital[] = data.map(h => ({
         id: h.id, name: h.name, latitude: h.latitude, longitude: h.longitude,
@@ -41,7 +38,7 @@ export default function HospitalsPage() {
       setFiltered(mapped);
       setLoading(false);
     })();
-  }, []);
+  }, [userLoc]);
 
   useEffect(() => {
     let f = hospitals;
@@ -50,10 +47,68 @@ export default function HospitalsPage() {
     setFiltered(f);
   }, [search, deptFilter, hospitals]);
 
+  // Simple, direct geolocation — no hook complexity
+  function handleGetLocation() {
+    if (!navigator.geolocation) {
+      setGeoError('Geolocation not supported by your browser.');
+      setUserLoc(DEFAULT_LOC);
+      return;
+    }
+
+    setGeoLoading(true);
+    setGeoError('');
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        console.log('✅ Got real GPS location:', loc);
+        setUserLoc(loc);
+        setGeoLoading(false);
+        setGeoError('');
+      },
+      (err) => {
+        console.warn('❌ Geolocation error:', err.code, err.message);
+        if (err.code === 1) {
+          setGeoError('Permission denied. Please allow location in browser settings.');
+        } else if (err.code === 2) {
+          setGeoError('Location unavailable. Using default.');
+        } else if (err.code === 3) {
+          setGeoError('Request timed out. Using default.');
+        } else {
+          setGeoError('Could not get location. Using default.');
+        }
+        setUserLoc(DEFAULT_LOC);
+        setGeoLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+    );
+  }
+
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-3xl font-bold text-gray-900 mb-2"><FaHospital className="inline w-7 h-7 mr-2 text-primary-600" />Hospitals in Peshawar</h1>
-      <p className="text-gray-600 mb-8">Find the nearest hospital with the right department for your needs.</p>
+      <p className="text-gray-600 mb-4">Find the nearest hospital with the right department for your needs.</p>
+
+      {/* Location Status + Button */}
+      <div className="flex items-center gap-3 mb-6 text-sm">
+        {userLoc && !geoError && userLoc.lat !== DEFAULT_LOC.lat ? (
+          <span className="text-green-600 flex items-center gap-1 font-medium">
+            <FaLocationPin className="w-4 h-4" /> Using your real location ({userLoc.lat.toFixed(4)}, {userLoc.lng.toFixed(4)})
+          </span>
+        ) : (
+          <button type="button" onClick={handleGetLocation} disabled={geoLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:bg-gray-300 transition-colors text-sm">
+            <FaLocationPin className="w-4 h-4" />
+            {geoLoading ? 'Detecting GPS...' : '📍 Use My Location'}
+          </button>
+        )}
+        {geoError && (
+          <span className="text-amber-600 flex items-center gap-1 text-xs">
+            <FaTriangleExclamation className="w-3 h-3" /> {geoError}
+          </span>
+        )}
+      </div>
 
       {loading ? (
         <div className="text-center py-20"><div className="animate-spin w-10 h-10 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-4"/><p className="text-gray-500">Loading hospitals...</p></div>
@@ -63,10 +118,10 @@ export default function HospitalsPage() {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="p-4 border-b border-gray-100">
-                <h3 className="font-semibold text-gray-900"><FaLocationDot className="inline w-4 h-4 mr-1 text-red-500" />Hospital Map</h3>
+                <h3 className="font-semibold text-gray-900"><FaLocationPin className="inline w-4 h-4 mr-1 text-red-500" />Hospital Map</h3>
                 <p className="text-xs text-gray-500">{filtered.length} hospitals shown</p>
               </div>
-              <MediRouteMap hospitals={filtered} userLocation={userLoc} height="550px" zoom={12} centerOnUser={true} />
+              <MediRouteMap hospitals={filtered} userLocation={userLoc && userLoc.lat !== DEFAULT_LOC.lat ? userLoc : null} height="550px" zoom={12} centerOnUser={true} />
             </div>
           </div>
 

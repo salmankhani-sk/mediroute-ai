@@ -24,6 +24,9 @@ export async function registerDoctor(input: {
   consultationFee: number;
   bio?: string;
   hospitalId?: string;
+  clinicName?: string;
+  clinicLat?: number;
+  clinicLng?: number;
 }) {
   try {
     // Validate inputs
@@ -40,6 +43,9 @@ export async function registerDoctor(input: {
       consultationFee: z.number().min(0),
       bio: z.string().max(1000).optional(),
       hospitalId: z.string().optional(),
+      clinicName: z.string().max(200).optional(),
+      clinicLat: z.number().min(-90).max(90).optional(),
+      clinicLng: z.number().min(-180).max(180).optional(),
     }).safeParse(input);
     if (!parsed.success) {
       return { success: false, error: parsed.error.errors[0]?.message || 'Invalid input.' };
@@ -62,6 +68,22 @@ export async function registerDoctor(input: {
     const passwordHash = await bcrypt.hash(input.password, 12);
 
     // Create user + doctor profile in a transaction
+    const doctorData: any = {
+      userId: '',
+      specialistType: input.specialistType as any,
+      department: input.department as any,
+      licenseNumber: input.licenseNumber,
+      qualification: input.qualification,
+      experienceYears: input.experienceYears,
+      consultationFee: input.consultationFee,
+      bio: input.bio || null,
+      isApproved: false,
+    };
+    if (input.hospitalId) doctorData.hospitalId = input.hospitalId;
+    if (input.clinicName) doctorData.clinicName = input.clinicName;
+    if (input.clinicLat != null) doctorData.clinicLat = input.clinicLat;
+    if (input.clinicLng != null) doctorData.clinicLng = input.clinicLng;
+
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -73,19 +95,10 @@ export async function registerDoctor(input: {
         },
       });
 
+      doctorData.userId = user.id;
+
       const doctorProfile = await tx.doctorProfile.create({
-        data: {
-          userId: user.id,
-          specialistType: input.specialistType as any,
-          department: input.department as any,
-          licenseNumber: input.licenseNumber,
-          qualification: input.qualification,
-          experienceYears: input.experienceYears,
-          consultationFee: input.consultationFee,
-          bio: input.bio || null,
-          hospitalId: input.hospitalId || null,
-          isApproved: false, // Requires admin approval
-        },
+        data: doctorData,
       });
 
       return { user, doctorProfile };
@@ -96,9 +109,12 @@ export async function registerDoctor(input: {
       message: 'Registration submitted successfully! Your profile is pending admin approval.',
       doctorId: result.doctorProfile.id,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Doctor registration error:', error);
-    return { success: false, error: 'Registration failed. Please try again.' };
+    const message = error?.code === 'P2002'
+      ? 'This license number or email is already in use.'
+      : error?.message || 'Registration failed. Please try again.';
+    return { success: false, error: message };
   }
 }
 

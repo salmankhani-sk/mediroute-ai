@@ -9,7 +9,7 @@ import {
   useMap,
 } from 'react-leaflet';
 import L from 'leaflet';
-import { FaLocationDot, FaPhone } from 'react-icons/fa6';
+import { FaLocationPin, FaPhone } from 'react-icons/fa6';
 import type { HospitalWithDistance } from '@/lib/ai-types';
 
 // ─── Fix Leaflet Default Icon Issue ─────────────────────────
@@ -143,7 +143,7 @@ export default function MediRouteMap({
         >
           <Popup>
             <div className="text-sm font-semibold text-blue-700">
-              <FaLocationDot className="inline w-4 h-4 mr-1 text-blue-600" />Your Location
+              <FaLocationPin className="inline w-4 h-4 mr-1 text-blue-600" />Your Location
             </div>
           </Popup>
         </Marker>

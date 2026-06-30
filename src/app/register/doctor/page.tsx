@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { registerDoctor } from '@/app/actions/auth';
+import { getAllHospitals } from '@/app/actions/location';
+import { useGeolocation } from '@/lib/useGeolocation';
+import { FaHospital, FaLocationPin, FaCirclePlus } from 'react-icons/fa6';
 
 const SPECIALIST_OPTIONS = [
   'CARDIOLOGIST','PULMONOLOGIST','NEUROLOGIST','ORTHOPEDIC','GASTROENTEROLOGIST',
@@ -17,15 +20,41 @@ const DEPARTMENT_OPTIONS = [
   'DENTAL','PHYSIOTHERAPY','RADIOLOGY','PATHOLOGY','EMERGENCY',
 ];
 
+const SPECIALIST_TO_DEPT: Record<string, string> = {
+  CARDIOLOGIST:'CARDIOLOGY', PULMONOLOGIST:'PULMONOLOGY', NEUROLOGIST:'NEUROLOGY',
+  ORTHOPEDIC:'ORTHOPEDICS', GASTROENTEROLOGIST:'GASTROENTEROLOGY',
+  DERMATOLOGIST:'DERMATOLOGY', PEDIATRICIAN:'PEDIATRICS', GYNECOLOGIST:'GYNECOLOGY',
+  UROLOGIST:'UROLOGY', ENT_SPECIALIST:'ENT', OPHTHALMOLOGIST:'OPHTHALMOLOGY',
+  PSYCHIATRIST:'PSYCHIATRY', ENDOCRINOLOGIST:'ENDOCRINOLOGY', NEPHROLOGIST:'NEPHROLOGY',
+  ONCOLOGIST:'ONCOLOGY', GENERAL_PHYSICIAN:'GENERAL_MEDICINE', DENTIST:'DENTAL',
+  PHYSIOTHERAPIST:'PHYSIOTHERAPY', RADIOLOGIST:'RADIOLOGY', PATHOLOGIST:'PATHOLOGY',
+};
+
 export default function DoctorRegisterPage() {
   const [form, setForm] = useState({
     fullName: '', email: '', password: '', phone: '',
     specialistType: '', department: '', licenseNumber: '',
     qualification: '', experienceYears: 0, consultationFee: 0,
     bio: '', hospitalId: '',
+    clinicName: '', clinicLat: '', clinicLng: '',
   });
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hospitals, setHospitals] = useState<any[]>([]);
+  const [useCustomClinic, setUseCustomClinic] = useState(false);
+  const { location: deviceLocation, loading: geoLoading, requestLocation } = useGeolocation();
+
+  useEffect(() => {
+    getAllHospitals().then(setHospitals).catch(() => {});
+  }, []);
+
+  // Auto-fill clinic location when device location is obtained
+  useEffect(() => {
+    if (useCustomClinic && deviceLocation) {
+      handleChange('clinicLat', deviceLocation.lat.toString());
+      handleChange('clinicLng', deviceLocation.lng.toString());
+    }
+  }, [deviceLocation, useCustomClinic]);
 
   const handleChange = (field: string, value: string | number) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -36,7 +65,21 @@ export default function DoctorRegisterPage() {
     setLoading(true);
     setMsg(null);
 
-    const res = await registerDoctor(form);
+    const payload: any = { ...form };
+    if (!useCustomClinic) {
+      payload.clinicName = undefined;
+      payload.clinicLat = undefined;
+      payload.clinicLng = undefined;
+    } else {
+      payload.hospitalId = undefined;
+      payload.clinicLat = payload.clinicLat ? parseFloat(payload.clinicLat) : undefined;
+      payload.clinicLng = payload.clinicLng ? parseFloat(payload.clinicLng) : undefined;
+    }
+    if (!payload.hospitalId && !useCustomClinic) {
+      payload.hospitalId = undefined; // no hospital selected
+    }
+
+    const res = await registerDoctor(payload);
     if (res.success) {
       setMsg({ type: 'success', text: res.message || 'Registration successful!' });
     } else {
@@ -79,7 +122,7 @@ export default function DoctorRegisterPage() {
           </div>
           <div>
             <label className={labelClass}>Specialist Type *</label>
-            <select required value={form.specialistType} onChange={e => { handleChange('specialistType', e.target.value); handleChange('department', e.target.value.replace('_SPECIALIST','').replace('CARDIOLOGIST','CARDIOLOGY').replace('PULMONOLOGIST','PULMONOLOGY').replace('NEUROLOGIST','NEUROLOGY').replace('ORTHOPEDIC','ORTHOPEDICS').replace('GASTROENTEROLOGIST','GASTROENTEROLOGY').replace('DERMATOLOGIST','DERMATOLOGY').replace('PEDIATRICIAN','PEDIATRICS').replace('GYNECOLOGIST','GYNECOLOGY').replace('UROLOGIST','UROLOGY').replace('ENT_SPECIALIST','ENT').replace('OPHTHALMOLOGIST','OPHTHALMOLOGY').replace('PSYCHIATRIST','PSYCHIATRY').replace('ENDOCRINOLOGIST','ENDOCRINOLOGY').replace('NEPHROLOGIST','NEPHROLOGY').replace('ONCOLOGIST','ONCOLOGY').replace('GENERAL_PHYSICIAN','GENERAL_MEDICINE').replace('DENTIST','DENTAL').replace('PHYSIOTHERAPIST','PHYSIOTHERAPY').replace('RADIOLOGIST','RADIOLOGY').replace('PATHOLOGIST','PATHOLOGY')); }} className={inputClass}>
+            <select required value={form.specialistType} onChange={e => { handleChange('specialistType', e.target.value); handleChange('department', SPECIALIST_TO_DEPT[e.target.value] || ''); }} className={inputClass}>
               <option value="">Select specialist type</option>
               {SPECIALIST_OPTIONS.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
             </select>
@@ -109,6 +152,68 @@ export default function DoctorRegisterPage() {
         <div>
           <label className={labelClass}>Professional Bio</label>
           <textarea value={form.bio} onChange={e => handleChange('bio', e.target.value)} rows={3} className={inputClass} placeholder="Brief introduction about your expertise and approach..." />
+        </div>
+
+        {/* ─── Hospital / Clinic Selection ─── */}
+        <div className="bg-gray-50 rounded-xl p-5 space-y-4">
+          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <FaHospital className="w-4 h-4 text-primary-600" /> Practice Location
+          </h3>
+
+          {/* Toggle: Hospital vs Custom Clinic */}
+          <div className="flex gap-3">
+            <button type="button"
+              onClick={() => { setUseCustomClinic(false); handleChange('hospitalId', ''); }}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${!useCustomClinic ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-100'}`}>
+              <FaHospital className="inline w-3.5 h-3.5 mr-1" /> Select Hospital
+            </button>
+            <button type="button"
+              onClick={() => { setUseCustomClinic(true); handleChange('hospitalId', ''); }}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${useCustomClinic ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-100'}`}>
+              <FaCirclePlus className="inline w-3.5 h-3.5 mr-1" /> My Own Clinic
+            </button>
+          </div>
+
+          {!useCustomClinic ? (
+            <div>
+              <label className={labelClass}>Select Hospital</label>
+              <select value={form.hospitalId} onChange={e => handleChange('hospitalId', e.target.value)} className={inputClass}>
+                <option value="">-- Choose your hospital --</option>
+                {hospitals.map(h => (
+                  <option key={h.id} value={h.id}>{h.name} — {h.address}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">If your hospital is not listed, switch to "My Own Clinic" above.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className={labelClass}>Clinic / Hospital Name *</label>
+                <input type="text" required={useCustomClinic} value={form.clinicName}
+                  onChange={e => handleChange('clinicName', e.target.value)}
+                  className={inputClass} placeholder="e.g., Dr. Zahid Dental Clinic" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Latitude</label>
+                  <input type="text" value={form.clinicLat}
+                    onChange={e => handleChange('clinicLat', e.target.value)}
+                    className={inputClass} placeholder="34.0151" />
+                </div>
+                <div>
+                  <label className={labelClass}>Longitude</label>
+                  <input type="text" value={form.clinicLng}
+                    onChange={e => handleChange('clinicLng', e.target.value)}
+                    className={inputClass} placeholder="71.5249" />
+                </div>
+              </div>
+              <button type="button" onClick={requestLocation} disabled={geoLoading}
+                className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-800 font-medium disabled:text-gray-400">
+                <FaLocationPin className="w-3.5 h-3.5" />
+                {geoLoading ? 'Getting location...' : deviceLocation ? '📍 Location Set' : 'Use My Current Location'}
+              </button>
+            </div>
+          )}
         </div>
 
         <button type="submit" disabled={loading}

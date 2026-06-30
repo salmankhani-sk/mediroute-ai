@@ -94,6 +94,8 @@ model User {
   fullName      String
   phone         String?
   role          UserRole  @default(PATIENT)
+  latitude      Float?
+  longitude     Float?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -126,9 +128,13 @@ model DoctorProfile {
 
   hospitalId      String?
   hospital        Hospital?      @relation(fields: [hospitalId], references: [id])
+  clinicName      String?
+  clinicLat       Float?
+  clinicLng       Float?
 
   appointments    Appointment[]  @relation("DoctorAppointments")
   schedules       DoctorSchedule[]
+  availabilities  DoctorAvailability[]
 
   @@index([specialistType])
   @@index([hospitalId])
@@ -201,6 +207,23 @@ model DoctorSchedule {
 
   @@unique([doctorId, dayOfWeek])
   @@map("doctor_schedules")
+}
+
+// ─── DoctorAvailability (Date-Specific) ────────────────
+
+model DoctorAvailability {
+  id         String   @id @default(uuid())
+  doctorId   String
+  doctor     DoctorProfile @relation(fields: [doctorId], references: [id])
+  date       DateTime       // specific date (e.g., 2026-07-05)
+  startTime  String         // "09:00"
+  endTime    String         // "17:00"
+  isAvailable Boolean  @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([doctorId, date])
+  @@map("doctor_availabilities")
 }
 
 // ─── Notification ───────────────────────────────────────

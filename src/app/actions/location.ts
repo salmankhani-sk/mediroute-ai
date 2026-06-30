@@ -1,7 +1,6 @@
 'use server';
 
 import prisma from '@/lib/db';
-import { PESHAWAR_HOSPITALS } from '@/lib/hospitals';
 import type { HospitalWithDistance } from '@/lib/ai-types';
 
 // ─── Haversine Formula ──────────────────────────────────────
@@ -110,12 +109,15 @@ export async function findDoctorsBySpecialist(
       phone: d.user.phone, specialistType: d.specialistType, department: d.department,
       qualification: d.qualification, experienceYears: d.experienceYears,
       consultationFee: d.consultationFee, bio: d.bio,
-      hospitalName: d.hospital?.name || 'Independent Practitioner',
-      hospitalAddress: d.hospital?.address || null,
-      hospitalLat: d.hospital?.latitude || null,
-      hospitalLng: d.hospital?.longitude || null,
-      distanceKm: userLat && userLng && d.hospital
-        ? haversineDistance(userLat, userLng, d.hospital.latitude, d.hospital.longitude) : null,
+      hospitalName: d.hospital?.name || d.clinicName || 'Independent Practitioner',
+      hospitalAddress: d.hospital?.address || d.clinicName || null,
+      hospitalLat: d.hospital?.latitude ?? d.clinicLat ?? null,
+      hospitalLng: d.hospital?.longitude ?? d.clinicLng ?? null,
+      distanceKm: userLat && userLng
+        ? haversineDistance(userLat, userLng,
+            d.hospital?.latitude ?? d.clinicLat ?? userLat,
+            d.hospital?.longitude ?? d.clinicLng ?? userLng)
+        : null,
     })).sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999));
   } catch (error) {
     console.error('findDoctorsBySpecialist error:', error);
@@ -147,6 +149,90 @@ export async function getDoctorById(doctorId: string) {
     console.error('getDoctorById error:', error);
     return null;
   }
+}
+
+// ─── Get All Approved Hospitals (for dropdown) ─────────────
+export async function getAllHospitals() {
+  try {
+    const hospitals = await prisma.hospital.findMany({
+      where: { isApproved: true },
+      select: { id: true, name: true, address: true, city: true, latitude: true, longitude: true },
+      orderBy: { name: 'asc' },
+    });
+    return hospitals;
+  } catch { return []; }
+}
+
+// ─── Save User Location ────────────────────────────────────
+export async function saveUserLocation(userId: string, lat: number, lng: number) {
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { latitude: lat, longitude: lng },
+    });
+    return { success: true };
+  } catch { return { success: false }; }
+}
+
+// ─── Get All Doctors (by specialty, with location) ─────────
+export async function getAllDoctorsBySpecialty(
+  specialistType?: string,
+  userLat?: number,
+  userLng?: number,
+) {
+  try {
+    const where: any = { isApproved: true, isAvailable: true };
+    if (specialistType) where.specialistType = specialistType as any;
+
+    const doctors = await prisma.doctorProfile.findMany({
+      where,
+      include: {
+        user: { select: { id: true, fullName: true, email: true, phone: true } },
+        hospital: { select: { id: true, name: true, latitude: true, longitude: true, address: true } },
+      },
+      orderBy: { consultationFee: 'asc' },
+    });
+
+    return doctors.map((d) => {
+      // Determine location: hospital first, then custom clinic
+      const locLat = d.hospital?.latitude ?? d.clinicLat ?? null;
+      const locLng = d.hospital?.longitude ?? d.clinicLng ?? null;
+      return {
+        id: d.id, userId: d.userId, fullName: d.user.fullName, email: d.user.email,
+        phone: d.user.phone, specialistType: d.specialistType, department: d.department,
+        qualification: d.qualification, experienceYears: d.experienceYears,
+        consultationFee: d.consultationFee, bio: d.bio,
+        hospitalName: d.hospital?.name || d.clinicName || 'Independent Practitioner',
+        hospitalAddress: d.hospital?.address || d.clinicName || null,
+        hospitalLat: locLat, hospitalLng: locLng,
+        distanceKm: userLat && userLng && locLat && locLng
+          ? haversineDistance(userLat, userLng, locLat, locLng) : null,
+      };
+    }).sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999));
+  } catch (error) {
+    console.error('getAllDoctorsBySpecialty error:', error);
+    return [];
+  }
+}
+
+// ─── Get Patient Symptom History ───────────────────────────
+export async function getPatientSymptomHistory(userId: string, limit = 20) {
+  try {
+    const history = await prisma.symptomAnalysis.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    return history.map(h => ({
+      id: h.id,
+      symptoms: h.symptoms,
+      suspectedCondition: h.suspectedCondition,
+      department: h.department,
+      urgencyLevel: h.urgencyLevel,
+      recommendedSpecialist: h.recommendedSpecialist,
+      createdAt: h.createdAt.toISOString(),
+    }));
+  } catch { return []; }
 }
 
 // ─── Seed Hospitals into DB ─────────────────────────────────

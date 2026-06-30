@@ -2,21 +2,21 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/lib/AuthProvider';
 
 export default function MobileNav() {
   const [open, setOpen] = useState(false);
+  const { user, logout } = useAuth();
 
-  const links = [
-    { href: '/symptoms', label: 'AI Symptom Check' },
-    { href: '/hospitals', label: 'Find Hospitals' },
-    { href: '/chatbot', label: 'MediBot AI' },
-    { href: '/appointments', label: 'My Appointments' },
-    { href: '/doctor', label: 'Doctor Panel' },
-    { href: '/admin', label: 'Admin' },
-    { href: '/register/doctor', label: 'Register as Doctor' },
-    { href: '/login', label: 'Login' },
-    { href: '/register', label: 'Patient Sign Up', highlight: true },
-  ];
+  const isLoggedIn = !!user;
+  const isPatient = user?.role === 'PATIENT';
+  const isDoctor = user?.role === 'DOCTOR';
+  const isAdmin = user?.role === 'ADMIN';
+
+  const closeMenu = () => setOpen(false);
+
+  const linkClass = 'block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors text-gray-700 hover:bg-gray-100';
+  const highlightClass = 'block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors bg-primary-600 text-white hover:bg-primary-700';
 
   return (
     <div className="md:hidden">
@@ -31,15 +31,53 @@ export default function MobileNav() {
       {open && (
         <div className="absolute top-16 left-0 right-0 bg-white border-b border-gray-200 shadow-lg z-50">
           <div className="px-4 py-3 space-y-1">
-            {links.map(l => (
-              <Link key={l.href} href={l.href}
-                onClick={() => setOpen(false)}
-                className={`block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  l.highlight ? 'bg-primary-600 text-white hover:bg-primary-700' : 'text-gray-700 hover:bg-gray-100'
-                }`}>
-                {l.label}
-              </Link>
-            ))}
+            {/* ─── Public ─── */}
+            <Link href="/symptoms" onClick={closeMenu} className={linkClass}>AI Symptom Check</Link>
+            <Link href="/hospitals" onClick={closeMenu} className={linkClass}>Find Hospitals</Link>
+            <Link href="/chatbot" onClick={closeMenu} className={linkClass}>MediBot AI</Link>
+
+            {/* ─── Patient ─── */}
+            {isPatient && (
+              <Link href="/appointments" onClick={closeMenu} className={linkClass}>My Appointments</Link>
+            )}
+
+            {/* ─── Doctor ─── */}
+            {isDoctor && (
+              <Link href="/doctor" onClick={closeMenu} className={linkClass}>Doctor Panel</Link>
+            )}
+
+            {/* ─── Admin ─── */}
+            {isAdmin && (
+              <Link href="/admin" onClick={closeMenu} className={linkClass}>Admin</Link>
+            )}
+
+            {/* ─── Logged-out ─── */}
+            {!isLoggedIn && (
+              <>
+                <hr className="my-2" />
+                <Link href="/register/doctor" onClick={closeMenu} className={linkClass}>Register as Doctor</Link>
+                <Link href="/login" onClick={closeMenu} className={linkClass}>Login</Link>
+                <Link href="/register" onClick={closeMenu} className={highlightClass}>Patient Sign Up</Link>
+              </>
+            )}
+
+            {/* ─── Logged-in user info + logout ─── */}
+            {isLoggedIn && (
+              <>
+                <hr className="my-2" />
+                <div className="px-4 py-2 text-sm text-gray-500">
+                  {user!.fullName}
+                  {isDoctor && <span className="ml-1 text-xs text-primary-600">(Doctor)</span>}
+                  {isAdmin && <span className="ml-1 text-xs text-amber-600">(Admin)</span>}
+                </div>
+                <button
+                  onClick={() => { logout(); closeMenu(); }}
+                  className="block w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  Sign Out
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

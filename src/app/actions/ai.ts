@@ -64,6 +64,10 @@ DEPARTMENTS & SPECIALISTS:
 - NEPHROLOGY → NEPHROLOGIST (kidneys, dialysis)
 - ONCOLOGY → ONCOLOGIST (cancer, tumors)
 - GENERAL_MEDICINE → GENERAL_PHYSICIAN (general health, fever, flu)
+- DENTAL → DENTIST (tooth pain, gum issues, cavities, dental problems, mouth)
+- PHYSIOTHERAPY → PHYSIOTHERAPIST (physical rehab, muscle pain, physiotherapy)
+- RADIOLOGY → RADIOLOGIST (X-ray, MRI, CT scan, imaging)
+- PATHOLOGY → PATHOLOGIST (lab tests, blood work, biopsy)
 - EMERGENCY → EMERGENCY (life-threatening conditions)
 
 OUTPUT FORMAT: You MUST respond with ONLY a valid JSON object, no markdown, no backticks:
